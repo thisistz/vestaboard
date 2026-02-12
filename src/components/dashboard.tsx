@@ -24,6 +24,13 @@ type FormState = {
   active: boolean;
 };
 
+type ApiErrorPayload = {
+  ok: false;
+  error?: string;
+  setupRequired?: boolean;
+  missing?: string[];
+};
+
 const initialForm: FormState = {
   boardName: "My Vestaboard",
   apiKey: "",
@@ -55,6 +62,13 @@ function formatTime(value: string): string {
   }
 }
 
+function toApiErrorMessage(data: ApiErrorPayload, fallback: string): string {
+  if (data.setupRequired && Array.isArray(data.missing) && data.missing.length > 0) {
+    return `Setup required: missing ${data.missing.join(", ")} in Vercel environment variables.`;
+  }
+  return data.error ?? fallback;
+}
+
 export function Dashboard() {
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [logs, setLogs] = useState<DeliveryLogItem[]>([]);
@@ -83,20 +97,24 @@ export function Dashboard() {
         ok: boolean;
         settings: PublicSettings | null;
         error?: string;
+        setupRequired?: boolean;
+        missing?: string[];
       };
 
       const logsData = (await logsRes.json()) as {
         ok: boolean;
         items: DeliveryLogItem[];
         error?: string;
+        setupRequired?: boolean;
+        missing?: string[];
       };
 
       if (!settingsData.ok) {
-        throw new Error(settingsData.error ?? "Failed to load settings.");
+        throw new Error(toApiErrorMessage(settingsData as ApiErrorPayload, "Failed to load settings."));
       }
 
       if (!logsData.ok) {
-        throw new Error(logsData.error ?? "Failed to load logs.");
+        throw new Error(toApiErrorMessage(logsData as ApiErrorPayload, "Failed to load logs."));
       }
 
       setSettings(settingsData.settings);
@@ -127,10 +145,16 @@ export function Dashboard() {
         body: JSON.stringify(payload)
       });
 
-      const data = (await res.json()) as { ok: boolean; settings?: PublicSettings; error?: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        settings?: PublicSettings;
+        error?: string;
+        setupRequired?: boolean;
+        missing?: string[];
+      };
 
       if (!data.ok || !data.settings) {
-        throw new Error(data.error ?? "Failed to save settings.");
+        throw new Error(toApiErrorMessage(data as ApiErrorPayload, "Failed to save settings."));
       }
 
       setSettings(data.settings);
@@ -147,9 +171,15 @@ export function Dashboard() {
   async function refreshLogs() {
     try {
       const res = await fetch("/api/logs?limit=15", { cache: "no-store" });
-      const data = (await res.json()) as { ok: boolean; items: DeliveryLogItem[]; error?: string };
+      const data = (await res.json()) as {
+        ok: boolean;
+        items: DeliveryLogItem[];
+        error?: string;
+        setupRequired?: boolean;
+        missing?: string[];
+      };
       if (!data.ok) {
-        throw new Error(data.error ?? "Failed to fetch logs.");
+        throw new Error(toApiErrorMessage(data as ApiErrorPayload, "Failed to fetch logs."));
       }
       setLogs(data.items ?? []);
     } catch (err) {
@@ -173,10 +203,12 @@ export function Dashboard() {
         ok: boolean;
         error?: string;
         quote?: { text: string };
+        setupRequired?: boolean;
+        missing?: string[];
       };
 
       if (!data.ok) {
-        throw new Error(data.error ?? "Test send failed.");
+        throw new Error(toApiErrorMessage(data as ApiErrorPayload, "Test send failed."));
       }
 
       setMessage(`Sent ${activeModeLabel} quote: ${data.quote?.text ?? "(no text)"}`);

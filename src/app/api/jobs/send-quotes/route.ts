@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/security/env";
+import {
+  getMissingCronEnvVars,
+  getMissingServerEnvVars,
+  getSetupResponse
+} from "@/lib/security/setup-check";
 import { sendDueQuotes } from "@/lib/scheduler/send-due-quotes";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const missing = [...getMissingServerEnvVars(), ...getMissingCronEnvVars()];
+  if (missing.length > 0) return getSetupResponse(missing);
+
   const expectedSecret = env.cronSecret;
 
   if (expectedSecret) {

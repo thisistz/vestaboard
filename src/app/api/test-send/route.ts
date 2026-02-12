@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getQuoteProvider } from "@/lib/providers";
+import { getMissingServerEnvVars, getSetupResponse } from "@/lib/security/setup-check";
 import { testSendSchema } from "@/lib/settings/schema";
 import {
   getAllActiveRuntimeConfigs,
@@ -12,6 +13,9 @@ import { sendVestaboardMessage } from "@/lib/vestaboard/client";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
+  const missing = getMissingServerEnvVars();
+  if (missing.length > 0) return getSetupResponse(missing);
+
   try {
     const body = await req.json().catch(() => ({}));
     const parsed = testSendSchema.safeParse(body);

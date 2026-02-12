@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
+import { getMissingServerEnvVars, getSetupResponse } from "@/lib/security/setup-check";
 import { listDeliveryLogs } from "@/lib/settings/service";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  const missing = getMissingServerEnvVars();
+  if (missing.length > 0) return getSetupResponse(missing);
+
   try {
     const url = new URL(req.url);
     const limitRaw = url.searchParams.get("limit");
