@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QuoteMode {
+  DAILYSCRIPT
+  RICK_MORTY
+}
+
+enum DeliveryStatus {
+  SUCCESS
+  FAILURE
+}
+
+model Board {
+  id                     String       @id @default(cuid())
+  name                   String       @unique
+  vestaboardApiKeyEnc    String
+  vestaboardApiSecretEnc String?
+  active                 Boolean      @default(true)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  config                 QuoteConfig?
+  logs                   DeliveryLog[]
+}
+
+model QuoteConfig {
+  id              String   @id @default(cuid())
+  boardId         String   @unique
+  mode            QuoteMode
+  intervalMinutes Int
+  timezone        String   @default("America/Los_Angeles")
+  lastSentAt      DateTime?
+  lastQuoteRef    String?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  board           Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+}
+
+model DeliveryLog {
+  id        String         @id @default(cuid())
+  boardId   String
+  mode      QuoteMode
+  quoteText String
+  quoteRef  String?
+  status    DeliveryStatus
+  error     String?
+  sentAt    DateTime       @default(now())
+  board     Board          @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId, sentAt])
+}
