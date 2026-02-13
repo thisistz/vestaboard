@@ -64,7 +64,7 @@ function formatTime(value: string): string {
 
 function toApiErrorMessage(data: ApiErrorPayload, fallback: string): string {
   if (data.setupRequired && Array.isArray(data.missing) && data.missing.length > 0) {
-    return `Setup required: missing ${data.missing.join(", ")} in Vercel environment variables.`;
+    return `Setup required: ${data.missing.join("; ")}. Update Vercel environment variables and redeploy.`;
   }
   return data.error ?? fallback;
 }

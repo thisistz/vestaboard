@@ -12,8 +12,25 @@ function isMissing(value: string): boolean {
   return value.trim().length === 0;
 }
 
+function hasValidPostgresProtocol(value: string): boolean {
+  return value.startsWith("postgresql://") || value.startsWith("postgres://");
+}
+
 export function getMissingServerEnvVars(): string[] {
-  return REQUIRED_SERVER_ENV_KEYS.filter((item) => isMissing(item.value)).map((item) => item.name);
+  const issues: string[] = [];
+
+  for (const item of REQUIRED_SERVER_ENV_KEYS) {
+    if (isMissing(item.value)) {
+      issues.push(item.name);
+      continue;
+    }
+
+    if (item.name === "DATABASE_URL" && !hasValidPostgresProtocol(item.value)) {
+      issues.push("DATABASE_URL must start with postgresql:// or postgres://");
+    }
+  }
+
+  return issues;
 }
 
 export function getMissingCronEnvVars(): string[] {
@@ -26,7 +43,7 @@ export function getSetupResponse(missing: string[]) {
       ok: false,
       setupRequired: true,
       error:
-        "Server setup is incomplete. Add required environment variables in Vercel project settings and redeploy.",
+        "Server setup is incomplete. Add missing or fix invalid environment variables in Vercel project settings and redeploy.",
       missing
     },
     { status: 503 }
