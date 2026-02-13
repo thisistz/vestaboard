@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { env } from "@/lib/security/env";
+import { env, getEffectiveDatabaseUrl, hasValidPostgresProtocol } from "@/lib/security/env";
 
 const REQUIRED_SERVER_ENV_KEYS = [
   { name: "DATABASE_URL", value: env.databaseUrl },
@@ -12,21 +12,21 @@ function isMissing(value: string): boolean {
   return value.trim().length === 0;
 }
 
-function hasValidPostgresProtocol(value: string): boolean {
-  return value.startsWith("postgresql://") || value.startsWith("postgres://");
-}
-
 export function getMissingServerEnvVars(): string[] {
   const issues: string[] = [];
 
-  for (const item of REQUIRED_SERVER_ENV_KEYS) {
+  const effectiveDatabaseUrl = getEffectiveDatabaseUrl();
+  if (isMissing(effectiveDatabaseUrl)) {
+    issues.push("DATABASE_URL or vestadtb_POSTGRES_PRISMA_URL");
+  } else if (!hasValidPostgresProtocol(effectiveDatabaseUrl)) {
+    issues.push(
+      "DATABASE_URL (or vestadtb_POSTGRES_PRISMA_URL) must start with postgresql:// or postgres://"
+    );
+  }
+
+  for (const item of REQUIRED_SERVER_ENV_KEYS.filter((item) => item.name !== "DATABASE_URL")) {
     if (isMissing(item.value)) {
       issues.push(item.name);
-      continue;
-    }
-
-    if (item.name === "DATABASE_URL" && !hasValidPostgresProtocol(item.value)) {
-      issues.push("DATABASE_URL must start with postgresql:// or postgres://");
     }
   }
 

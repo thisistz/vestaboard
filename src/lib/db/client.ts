@@ -1,4 +1,10 @@
 import { PrismaClient } from "@prisma/client";
+import { getEffectiveDatabaseUrl } from "@/lib/security/env";
+
+const effectiveDatabaseUrl = getEffectiveDatabaseUrl();
+if (effectiveDatabaseUrl) {
+  process.env.DATABASE_URL = effectiveDatabaseUrl;
+}
 
 declare global {
   // eslint-disable-next-line no-var
