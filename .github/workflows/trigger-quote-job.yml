@@ -1,0 +1,38 @@
+name: Trigger Quote Sender
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quote-scheduler
+  cancel-in-progress: false
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call quote scheduler endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          CRON_URL: ${{ secrets.QUOTE_CRON_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing required GitHub secret: CRON_SECRET"
+            exit 1
+          fi
+
+          TARGET_URL="${CRON_URL:-https://vestaboard-mu.vercel.app/api/jobs/send-quotes}"
+
+          echo "Triggering: ${TARGET_URL}"
+          curl --fail-with-body --silent --show-error \
+            -X POST "${TARGET_URL}" \
+            -H "x-cron-secret: ${CRON_SECRET}" \
+            -H "content-type: application/json" \
+            --data '{}'
