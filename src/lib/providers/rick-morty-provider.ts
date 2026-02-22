@@ -2,6 +2,7 @@ import type { QuoteItem, QuoteProvider } from "@/types/quotes";
 
 const RICK_MORTY_QUOTES_URL =
   "https://raw.githubusercontent.com/AndrewReitz/rick-and-morty-quotes-json/master/rick-and-morty-quotes.json";
+const VESTABOARD_MAX_TEXT_LENGTH = 132;
 
 type RickMortyRecord = {
   quote: string;
@@ -24,6 +25,30 @@ function pickNonRepeatingIndex(length: number, lastQuoteRef?: string): number {
   }
 
   return next;
+}
+
+function isVestaboardSafe(text: string): boolean {
+  return text.length <= VESTABOARD_MAX_TEXT_LENGTH;
+}
+
+function pickRandomSafeQuote(quotes: string[], lastQuoteRef?: string): { text: string; idx: number } | null {
+  if (quotes.length === 0) return null;
+
+  const previous = Number(lastQuoteRef?.replace("rm-", ""));
+  const candidateIndexes = quotes
+    .map((quote, idx) => ({ quote, idx }))
+    .filter((item) => isVestaboardSafe(item.quote))
+    .map((item) => item.idx);
+
+  if (candidateIndexes.length === 0) return null;
+
+  const nonRepeating = Number.isInteger(previous)
+    ? candidateIndexes.filter((idx) => idx !== previous)
+    : candidateIndexes;
+
+  const pool = nonRepeating.length > 0 ? nonRepeating : candidateIndexes;
+  const idx = pool[Math.floor(Math.random() * pool.length)];
+  return { text: quotes[idx], idx };
 }
 
 function normalizeRecord(input: unknown): string | null {
@@ -57,18 +82,31 @@ export class RickMortyProvider implements QuoteProvider {
       const payload = res.ok ? await res.json() : LOCAL_FALLBACK_QUOTES;
       const quotes = normalizePayload(payload);
       const data = quotes.length > 0 ? quotes : LOCAL_FALLBACK_QUOTES;
-
-      const idx = pickNonRepeatingIndex(data.length, lastQuoteRef);
-      const item = data[idx];
+      const picked = pickRandomSafeQuote(data, lastQuoteRef);
+      if (!picked) {
+        const idx = pickNonRepeatingIndex(LOCAL_FALLBACK_QUOTES.length, lastQuoteRef);
+        return {
+          text: LOCAL_FALLBACK_QUOTES[idx].slice(0, VESTABOARD_MAX_TEXT_LENGTH),
+          ref: `rm-${idx}`
+        };
+      }
 
       return {
-        text: item,
-        ref: `rm-${idx}`
+        text: picked.text,
+        ref: `rm-${picked.idx}`
       };
     } catch {
-      const idx = pickNonRepeatingIndex(LOCAL_FALLBACK_QUOTES.length, lastQuoteRef);
+      const picked = pickRandomSafeQuote(LOCAL_FALLBACK_QUOTES, lastQuoteRef);
+      if (picked) {
+        return {
+          text: picked.text,
+          ref: `rm-${picked.idx}`
+        };
+      }
+
+      const idx = pickNonRepeatingIndex(LOCAL_FALLBACK_QUOTES.length, lastQuoteRef ?? "rm-0");
       return {
-        text: LOCAL_FALLBACK_QUOTES[idx],
+        text: LOCAL_FALLBACK_QUOTES[idx].slice(0, VESTABOARD_MAX_TEXT_LENGTH),
         ref: `rm-${idx}`
       };
     }
