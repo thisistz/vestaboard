@@ -28,11 +28,15 @@ jobs:
             exit 1
           fi
 
-          TARGET_URL="${CRON_URL:-https://vestaboard-mu.vercel.app/api/jobs/send-quotes}"
+          if [ -z "${CRON_URL:-}" ]; then
+            echo "Missing required GitHub secret: QUOTE_CRON_URL"
+            echo "Expected format: https://your-project.vercel.app/api/jobs/send-quotes"
+            exit 1
+          fi
 
-          echo "Triggering: ${TARGET_URL}"
+          echo "Triggering scheduler endpoint"
           curl --fail-with-body --silent --show-error \
-            -X POST "${TARGET_URL}" \
+            -X POST "${CRON_URL}" \
             -H "x-cron-secret: ${CRON_SECRET}" \
             -H "content-type: application/json" \
             --data '{}'

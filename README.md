@@ -1,67 +1,116 @@
 # Vestaboard Quotes Sender
 
-A Next.js + Prisma app that sends scheduled quotes to a Vestaboard.
+Send movie and TV quotes to your Vestaboard on a recurring schedule.
 
-## Current Status
+This project provides:
+- a web app to configure quote mode, interval, and board credentials
+- a scheduler endpoint for automated dispatch
+- delivery logs for success and failure visibility
 
-- Quote sources implemented:
-  - `RICK_MORTY` (from the AndrewReitz JSON dataset)
-  - `DAILYSCRIPT` (HTML parsing based)
-- Web app settings are live for:
-  - board credentials
-  - mode selection
-  - interval minutes
-  - active toggle
-- Delivery logging is enabled (`SUCCESS` / `FAILURE`).
-- Database schema is Postgres via Prisma.
+## Quote Modes
 
-## Live Scheduling Model
+- `RICK_MORTY`: random quotes from Andrew Reitz's Rick and Morty JSON dataset
+- `DAILYSCRIPT`: quote scraping from DailyScript with parser fallback
 
-This project currently uses a hybrid scheduler because of Vercel Hobby limitations.
+## Stack
 
-- Vercel cron (`vercel.json`): `0 0 * * *` (daily)
-- GitHub Actions scheduler (`.github/workflows/trigger-quote-job.yml`): `*/5 * * * *`
+- Next.js (App Router)
+- Prisma + PostgreSQL
+- Vercel deployment target
+- GitHub Actions scheduler (recommended for Vercel Hobby)
 
-The GitHub workflow calls:
+## 1. Clone and Install
 
-- `POST /api/jobs/send-quotes`
-- with header `x-cron-secret: $CRON_SECRET`
+```bash
+git clone https://github.com/your-account/vestaboard.git
+cd vestaboard
+npm install
+```
 
-### Effective Interval Rule
+## 2. Configure Environment Variables
 
-The app only evaluates due jobs when the scheduler runs.
+Copy template:
 
-- If app interval is 1 minute but workflow runs every 5 minutes, effective cadence is roughly 5+ minutes.
-- For reliable behavior, set `intervalMinutes` >= 5 on this free-tier setup.
+```bash
+cp .env.example .env.local
+```
 
-## Environment Variables
-
-Required in Vercel (`Production`, `Preview`, and optionally `Development`):
-
+Set values in `.env.local`:
 - `DATABASE_URL`
 - `ENCRYPTION_KEY`
 - `CRON_SECRET`
 - `APP_SINGLE_USER_SECRET`
 
-Neon integration variables are also present. Runtime fallback supports:
+## 3. Initialize Database Schema
 
+For first-time setup:
+
+```bash
+npm run db:push
+```
+
+For migration-based workflows:
+
+```bash
+npm run db:migrate
+```
+
+## 4. Run Locally
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+## 5. Deploy to Vercel
+
+Deploy with Vercel Git integration or CLI.
+
+Set the same environment variables in Vercel Project Settings:
 - `DATABASE_URL`
-- `vestadtb_POSTGRES_PRISMA_URL` (fallback when `DATABASE_URL` is missing or malformed)
+- `ENCRYPTION_KEY`
+- `CRON_SECRET`
+- `APP_SINGLE_USER_SECRET`
 
-## GitHub Secrets
+### Neon Integration Fallback
 
-Required in GitHub repo secrets for scheduler workflow:
+If your Vercel Neon integration provides `vestadtb_POSTGRES_PRISMA_URL`, runtime fallback can use it when `DATABASE_URL` is missing or malformed.
 
+## 6. Configure Scheduler (Free Tier Recommended)
+
+### Why GitHub Actions Scheduler
+
+Vercel Hobby cron has restrictive cadence. This repo uses:
+- Vercel cron in `vercel.json`: daily
+- GitHub Actions scheduler: every 5 minutes
+
+### Required GitHub Secrets
+
+In your GitHub repo settings, add:
 - `CRON_SECRET` (must exactly match Vercel `CRON_SECRET`)
-- `QUOTE_CRON_URL` (optional, defaults to production endpoint)
+- `QUOTE_CRON_URL` (example: `https://your-project.vercel.app/api/jobs/send-quotes`)
 
-## Vestaboard Constraints
+Workflow file:
+- `.github/workflows/trigger-quote-job.yml`
 
-Vestaboard rejects messages longer than 132 characters.
+## Effective Interval Behavior
 
-- Rick & Morty provider now skips overlong quotes and re-picks random quotes until one fits.
+The app sends when both are true:
+- scheduler trigger occurs
+- `intervalMinutes` has elapsed since last send
 
-## API Endpoints
+Because scheduler cadence is `*/5`, practical minimum is about 5+ minutes.
+
+## Vestaboard Message Constraints
+
+Vestaboard rejects message text over 132 characters.
+
+Current behavior for Rick and Morty mode:
+- skip overlong quotes
+- randomize again until a safe quote is selected
+
+## API Routes
 
 - `GET /api/health`
 - `GET /api/settings`
@@ -70,52 +119,43 @@ Vestaboard rejects messages longer than 132 characters.
 - `POST /api/jobs/send-quotes`
 - `GET /api/logs`
 
-## Setup Steps
+## CI
 
-1. Install dependencies:
+GitHub Actions CI workflow runs build checks on push/PR:
+- `.github/workflows/ci.yml`
 
-```bash
-npm install
-```
-
-2. Ensure env vars are set in Vercel.
-
-3. Apply DB schema once against production DB:
-
-```bash
-npx prisma db push
-```
-
-4. Deploy latest `main`.
-
-5. Confirm health and settings endpoints.
-
-## Troubleshooting
+## Common Issues
 
 ### `Invalid settings payload`
 
-If `apiSecret` blank triggers validation, deploy latest code (fix included).
+Ensure you are on latest deployment and not sending invalid field values.
 
 ### `QuoteConfig does not exist`
 
-Database schema not applied yet. Run Prisma schema push/migration.
+Database schema not initialized yet. Run `db:push` or migrations.
 
-### `Unauthorized` on scheduler endpoint
+### `Unauthorized` from `/api/jobs/send-quotes`
 
-`CRON_SECRET` mismatch between GitHub and Vercel, or stale deployment not using latest env.
+`CRON_SECRET` mismatch between GitHub and Vercel, or stale deployment after secret changes.
 
 ### No sends at expected cadence
 
 Check:
+- settings active state
+- saved interval
+- GitHub scheduled run history
+- `/api/logs` for delivery errors
 
-- settings `active=true`
-- `intervalMinutes`
-- GitHub Actions run history (scheduled runs)
-- `/api/logs` for failures (especially overlong quote errors)
+## Security Notes
 
-## Documentation
+- Never commit real `.env` files.
+- Keep `.env.local` out of version control.
+- Rotate secrets if leaked.
 
-- Architecture: `docs/ARCHITECTURE.md`
-- Roadmap: `docs/DEVELOPMENT_ROADMAP.md`
-- MVP status: `docs/MVP_STATUS.md`
-- Implementation history: `docs/IMPLEMENTATION_HISTORY.md`
+## Additional Docs
+
+- `docs/ARCHITECTURE.md`
+- `docs/DEVELOPMENT_ROADMAP.md`
+- `docs/MVP_STATUS.md`
+- `docs/IMPLEMENTATION_HISTORY.md`
+- `CONTRIBUTING.md`
