@@ -1,79 +1,121 @@
 # Vestaboard Quotes Sender
 
-A Next.js + Prisma MVP that sends scheduled quotes to a Vestaboard.
+A Next.js + Prisma app that sends scheduled quotes to a Vestaboard.
 
-## Features Implemented
+## Current Status
 
-- Web UI to configure:
-  - Vestaboard credentials
-  - quote source mode (`DAILYSCRIPT` or `RICK_MORTY`)
-  - interval in minutes
-  - timezone and active status
-- API endpoints:
-  - `GET/POST /api/settings`
-  - `POST /api/test-send`
-  - `POST /api/jobs/send-quotes`
-  - `GET /api/logs`
-  - `GET /api/health`
-- Scheduler worker logic for due jobs.
-- Delivery logging to database.
-- Vercel cron schedule configured in `vercel.json`.
+- Quote sources implemented:
+  - `RICK_MORTY` (from the AndrewReitz JSON dataset)
+  - `DAILYSCRIPT` (HTML parsing based)
+- Web app settings are live for:
+  - board credentials
+  - mode selection
+  - interval minutes
+  - active toggle
+- Delivery logging is enabled (`SUCCESS` / `FAILURE`).
+- Database schema is Postgres via Prisma.
 
-## Quote Modes
+## Live Scheduling Model
 
-- `DAILYSCRIPT`
-  - fetches and parses quote candidates from [dailyscript.com](https://www.dailyscript.com)
-- `RICK_MORTY`
-  - fetches quotes from [Rick and Morty JSON](https://raw.githubusercontent.com/AndrewReitz/rick-and-morty-quotes-json/master/rick-and-morty-quotes.json)
+This project currently uses a hybrid scheduler because of Vercel Hobby limitations.
 
-## Requirements
+- Vercel cron (`vercel.json`): `0 0 * * *` (daily)
+- GitHub Actions scheduler (`.github/workflows/trigger-quote-job.yml`): `*/5 * * * *`
 
-- Node.js 20+
-- PostgreSQL database
-- Vestaboard Read/Write API key
+The GitHub workflow calls:
 
-## Local Setup
+- `POST /api/jobs/send-quotes`
+- with header `x-cron-secret: $CRON_SECRET`
 
-1. Copy env file:
+### Effective Interval Rule
 
-```bash
-cp .env.example .env.local
-```
+The app only evaluates due jobs when the scheduler runs.
 
-2. Fill `.env.local` values.
+- If app interval is 1 minute but workflow runs every 5 minutes, effective cadence is roughly 5+ minutes.
+- For reliable behavior, set `intervalMinutes` >= 5 on this free-tier setup.
 
-3. Install dependencies:
+## Environment Variables
+
+Required in Vercel (`Production`, `Preview`, and optionally `Development`):
+
+- `DATABASE_URL`
+- `ENCRYPTION_KEY`
+- `CRON_SECRET`
+- `APP_SINGLE_USER_SECRET`
+
+Neon integration variables are also present. Runtime fallback supports:
+
+- `DATABASE_URL`
+- `vestadtb_POSTGRES_PRISMA_URL` (fallback when `DATABASE_URL` is missing or malformed)
+
+## GitHub Secrets
+
+Required in GitHub repo secrets for scheduler workflow:
+
+- `CRON_SECRET` (must exactly match Vercel `CRON_SECRET`)
+- `QUOTE_CRON_URL` (optional, defaults to production endpoint)
+
+## Vestaboard Constraints
+
+Vestaboard rejects messages longer than 132 characters.
+
+- Rick & Morty provider now skips overlong quotes and re-picks random quotes until one fits.
+
+## API Endpoints
+
+- `GET /api/health`
+- `GET /api/settings`
+- `POST /api/settings`
+- `POST /api/test-send`
+- `POST /api/jobs/send-quotes`
+- `GET /api/logs`
+
+## Setup Steps
+
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-4. Generate Prisma client and run migrations:
+2. Ensure env vars are set in Vercel.
+
+3. Apply DB schema once against production DB:
 
 ```bash
-npm run db:generate
-npm run db:migrate
+npx prisma db push
 ```
 
-5. Start app:
+4. Deploy latest `main`.
 
-```bash
-npm run dev
-```
+5. Confirm health and settings endpoints.
 
-Open `http://localhost:3000`.
+## Troubleshooting
 
-## Cron
+### `Invalid settings payload`
 
-`vercel.json` runs cron every minute:
+If `apiSecret` blank triggers validation, deploy latest code (fix included).
 
-- path: `/api/jobs/send-quotes`
-- schedule: `* * * * *`
+### `QuoteConfig does not exist`
 
-In production, include header `x-cron-secret` matching `CRON_SECRET`.
+Database schema not applied yet. Run Prisma schema push/migration.
 
-## Notes
+### `Unauthorized` on scheduler endpoint
 
-- The sender currently uses Vestaboard Read/Write endpoint (`https://rw.vestaboard.com/`).
-- `ENCRYPTION_KEY` encrypts credentials at rest.
-- DailyScript parsing relies on page structure and may need selector updates over time.
+`CRON_SECRET` mismatch between GitHub and Vercel, or stale deployment not using latest env.
+
+### No sends at expected cadence
+
+Check:
+
+- settings `active=true`
+- `intervalMinutes`
+- GitHub Actions run history (scheduled runs)
+- `/api/logs` for failures (especially overlong quote errors)
+
+## Documentation
+
+- Architecture: `docs/ARCHITECTURE.md`
+- Roadmap: `docs/DEVELOPMENT_ROADMAP.md`
+- MVP status: `docs/MVP_STATUS.md`
+- Implementation history: `docs/IMPLEMENTATION_HISTORY.md`
